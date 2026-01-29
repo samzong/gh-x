@@ -23,7 +23,7 @@ type syncResult struct {
 }
 
 var cloneCmd = &cobra.Command{
-	Use:   "clone <user1> [user2] ...",
+	Use:   "clone <user1> [org2] ...",
 	Short: "Clone or update all repos for one or more users/orgs",
 	Args:  cobra.MinimumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
