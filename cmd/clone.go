@@ -22,6 +22,13 @@ type syncResult struct {
 	failed  bool
 }
 
+type repoListOptions struct {
+	source  bool
+	fork    bool
+	private bool
+	public  bool
+}
+
 var cloneCmd = &cobra.Command{
 	Use:   "clone <user1> [org2] ...",
 	Short: "Clone or update all repos for one or more users/orgs",
@@ -103,7 +110,16 @@ func runClone(ctx context.Context, users []string) error {
 }
 
 func listRepos(user string) ([]string, error) {
-	stdout, stderr, err := gh.Exec("repo", "list", user, "--limit", "1000", "--json", "nameWithOwner", "-q", ".[].nameWithOwner")
+	return listReposWithOptions(user, repoListOptions{})
+}
+
+func listReposWithOptions(user string, options repoListOptions) ([]string, error) {
+	args, err := repoListArgs(user, options)
+	if err != nil {
+		return nil, err
+	}
+
+	stdout, stderr, err := gh.Exec(args...)
 	if err != nil {
 		if msg := strings.TrimSpace(stderr.String()); msg != "" {
 			return nil, fmt.Errorf("✗ %s (list failed): %s", user, msg)
@@ -118,6 +134,30 @@ func listRepos(user string) ([]string, error) {
 		}
 	}
 	return repos, nil
+}
+
+func repoListArgs(user string, options repoListOptions) ([]string, error) {
+	if options.source && options.fork {
+		return nil, errors.New("--source and --fork cannot be used together")
+	}
+	if options.private && options.public {
+		return nil, errors.New("--private and --public cannot be used together")
+	}
+
+	args := []string{"repo", "list", user, "--limit", "1000"}
+	if options.source {
+		args = append(args, "--source")
+	}
+	if options.fork {
+		args = append(args, "--fork")
+	}
+	if options.private {
+		args = append(args, "--visibility", "private")
+	}
+	if options.public {
+		args = append(args, "--visibility", "public")
+	}
+	return append(args, "--json", "nameWithOwner", "-q", ".[].nameWithOwner"), nil
 }
 
 func syncRepo(ctx context.Context, repo, targetDir string) syncResult {
@@ -146,13 +186,17 @@ func runGit(ctx context.Context, repoPath string, args ...string) error {
 }
 
 func parallelFromEnv() int {
-	value := strings.TrimSpace(os.Getenv("CLONE_PARALLEL"))
+	return intFromEnv("CLONE_PARALLEL", 4)
+}
+
+func intFromEnv(name string, fallback int) int {
+	value := strings.TrimSpace(os.Getenv(name))
 	if value == "" {
-		return 4
+		return fallback
 	}
 	parsed, err := strconv.Atoi(value)
 	if err != nil || parsed <= 0 {
-		return 4
+		return fallback
 	}
 	return parsed
 }
