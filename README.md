@@ -70,6 +70,7 @@ gh x webhook list --fork --private <owner>
 gh x webhook add https://example.com/webhook <owner/repo|owner>...
 gh x webhook add --source --public https://example.com/webhook <owner>
 gh x webhook add -e push -e pull_request --secret-env WEBHOOK_SECRET https://example.com/webhook <owner/repo|owner>...
+gh x webhook delete https://example.com/webhook <owner/repo|owner>...
 WEBHOOK_PARALLEL=16 gh x webhook list <owner>
 ```
 
@@ -80,6 +81,9 @@ WEBHOOK_PARALLEL=16 gh x webhook list <owner>
 - If the repo does not exist locally, it runs `gh repo clone`.
 - Webhook targets accept either `owner/repo` or an owner/org name. Owner/org names are expanded with `gh repo list`.
 - Use `--source`, `--fork`, `--private`, or `--public` to filter owner/org expansion.
+- Webhook add matches existing hooks by URL. It updates one matching hook or creates one when missing.
+- Webhook add subscribes to all events by default. Use `-e`/`--event` to select specific events.
+- Webhook delete removes hooks matching the URL.
 - Webhook secrets are read from the named environment variable.
 - Webhook list uses `WEBHOOK_PARALLEL` for concurrent read requests. The default is `8`.
 
