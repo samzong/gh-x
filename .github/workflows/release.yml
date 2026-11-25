@@ -1,19 +1,90 @@
 name: release
+
 on:
   push:
     tags:
       - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to verify and publish
+        required: true
+        type: string
+
 permissions:
-  contents: write
-  id-token: write
-  attestations: write
+  contents: read
+
+env:
+  RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+  RELEASE_REF: refs/tags/${{ inputs.tag || github.ref_name }}
 
 jobs:
-  release:
+  verify:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Verify SemVer release tag syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ ! "$RELEASE_TAG" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-((alpha|beta|rc)\.[1-9][0-9]*))?$ ]]; then
+            echo "::error::Invalid SemVer release tag: $RELEASE_TAG"
+            exit 1
+          fi
+
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ env.RELEASE_REF }}
+          fetch-depth: 0
+
+      - name: Verify release tag commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$(git rev-parse HEAD)" != "$(git rev-parse "refs/tags/$RELEASE_TAG^{commit}")" ]]; then
+            echo "::error::Checked out commit does not match tag $RELEASE_TAG"
+            exit 1
+          fi
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Run tests
+        run: go test -race ./...
+
+  release:
+    needs: verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
     steps:
       - uses: actions/checkout@v6
+        with:
+          ref: ${{ env.RELEASE_REF }}
+          fetch-depth: 0
+
+      - name: Prepare build metadata
+        id: meta
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "commit=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+          echo "date=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+
       - uses: cli/gh-extension-precompile@v2
         with:
+          release_tag: ${{ env.RELEASE_TAG }}
           generate_attestations: true
           go_version_file: go.mod
+          go_build_options: -ldflags=-s -w -X github.com/samzong/gh-x/internal/version.Version=${{ env.RELEASE_TAG }} -X github.com/samzong/gh-x/internal/version.Commit=${{ steps.meta.outputs.commit }} -X github.com/samzong/gh-x/internal/version.Date=${{ steps.meta.outputs.date }}
+
+      - name: Mark GitHub release as prerelease
+        if: contains(env.RELEASE_TAG, '-')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release edit "$RELEASE_TAG" --prerelease --latest=false

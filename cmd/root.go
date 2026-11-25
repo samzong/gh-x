@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/samzong/gh-x/internal/version"
 	"github.com/spf13/cobra"
 )
 
@@ -12,6 +13,7 @@ var rootCmd = &cobra.Command{
 	Short: "GitHub CLI extension for batch operations",
 	Long: `gh-x is a GitHub CLI extension that provides batch operations
 for managing multiple repositories.`,
+	Version:       version.Format(),
 	SilenceUsage:  true,
 	SilenceErrors: true,
 }
